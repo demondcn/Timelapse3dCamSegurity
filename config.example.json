@@ -1,0 +1,43 @@
+{
+  "impresora_ip": "192.0.2.10",
+  "camara_ip": "192.0.2.20",
+  "usuario_camara": "usuario_ejemplo",
+  "contrasena_camara": "CAMBIAR_ESTA_CONTRASENA",
+  "retardo_captura_seg": 0.3,
+  "retardos_prueba_seg": [0.0, 0.3, 0.7, 1.1, 1.5, 2.0],
+  "fotos_por_segundo": 6.0,
+  "fps_timelapse": 30,
+  "grabar_video_completo": true,
+  "mejora": {
+    "habilitada": true,
+    "reduccion_ruido": 3.0,
+    "exposicion_ev": 0.0,
+    "estabilizar_exposicion": true,
+    "ganancia_minima": 0.9,
+    "ganancia_maxima": 1.1,
+    "suavizado_temporal": 0.85,
+    "cambio_maximo_por_fotograma": 0.015,
+    "contraste": 1.05,
+    "nitidez": 0.35,
+    "radio_nitidez": 1.2,
+    "calidad_jpg": 95,
+    "real_esrgan": {
+      "habilitado": false,
+      "ejecutable": "herramientas/realesrgan-ncnn-vulkan/realesrgan-ncnn-vulkan.exe",
+      "modelo": "realesrgan-x4plus",
+      "escala": 2,
+      "tile": 0,
+      "gpu_id": "auto"
+    }
+  },
+  "video": {
+    "crf": 18,
+    "preset": "slow",
+    "codec": "libx264",
+    "pix_fmt": "yuv420p",
+    "ancho_horizontal": 1920,
+    "alto_horizontal": 1080,
+    "ancho_vertical": 1080,
+    "alto_vertical": 1920
+  }
+}
