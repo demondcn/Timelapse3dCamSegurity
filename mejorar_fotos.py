@@ -6,10 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-from exportador_video import cargar_configuracion as cargar_video
-from exportador_video import exportar_videos
 from mejora_imagenes import cargar_configuracion as cargar_mejora
 from mejora_imagenes import listar_originales, procesar_secuencia
+from perfiles_exportacion import PERFILES, exportar_perfil, reservar_directorio
 
 
 BASE = Path(__file__).resolve().parent
@@ -49,6 +48,10 @@ def main() -> int:
     )
     parser.add_argument("--config", type=Path, default=BASE / "config.json")
     parser.add_argument("--sin-video", action="store_true", help="Solo crea imagenes mejoradas")
+    parser.add_argument(
+        "--perfil", choices=PERFILES,
+        help="estandar, alta_calidad o ultra_ia; por defecto usa config.json",
+    )
     parser.add_argument("--fotos-por-segundo", type=float, help="Reemplaza el valor de config.json")
     parser.add_argument("--fps-salida", type=int, help="Reemplaza el valor de config.json")
     args = parser.parse_args()
@@ -61,42 +64,42 @@ def main() -> int:
 
     print(f"Sesion: {carpeta}", flush=True)
     print(f"Originales preservados: {len(originales)}", flush=True)
-    config_mejora = cargar_mejora(config_general.get("mejora"))
-    mejoradas = procesar_secuencia(
-        originales,
-        carpeta / "imagenes_mejoradas",
-        config_mejora,
-        base=BASE,
-        progreso=lambda mensaje: print(mensaje, flush=True),
-    )
-    print(f"Fotografias mejoradas: {len(mejoradas)}", flush=True)
+    if args.fotos_por_segundo is not None:
+        config_general["fotos_por_segundo"] = args.fotos_por_segundo
+    if args.fps_salida is not None:
+        perfil_objetivo = args.perfil or str(
+            config_general.get("exportacion", {}).get("perfil", "ultra_ia")
+        )
+        exportacion = config_general.setdefault("exportacion", {})
+        perfiles = exportacion.setdefault("perfiles", {})
+        perfiles.setdefault(perfil_objetivo, {})["fps"] = args.fps_salida
 
-    if not args.sin_video:
-        fotos_por_segundo = (
-            args.fotos_por_segundo
-            if args.fotos_por_segundo is not None
-            else float(config_general.get("fotos_por_segundo", 6.0))
-        )
-        fps_configurado = (
-            args.fps_salida
-            if args.fps_salida is not None
-            else config_general.get("fps_timelapse", 30)
-        )
-        try:
-            fps_salida = int(fps_configurado)
-        except (TypeError, ValueError):
-            fps_salida = 30
-        if not 1 <= fps_salida <= 120:
-            fps_salida = 30
-        salidas = exportar_videos(
-            mejoradas,
-            carpeta,
-            fotos_por_segundo,
-            fps_salida,
-            cargar_video(config_general.get("video")),
+    if args.sin_video:
+        destino = reservar_directorio(carpeta, "solo_mejora") / "fotogramas_procesados"
+        mejoradas = procesar_secuencia(
+            originales,
+            destino,
+            cargar_mejora(config_general.get("mejora")),
+            base=BASE,
             progreso=lambda mensaje: print(mensaje, flush=True),
         )
-        for salida in salidas:
+        print(f"Fotografias mejoradas: {len(mejoradas)} en {destino}", flush=True)
+    else:
+        resultado = exportar_perfil(
+            originales,
+            carpeta,
+            config_general,
+            perfil_solicitado=args.perfil,
+            base=BASE,
+            progreso=lambda mensaje: print(mensaje, flush=True),
+        )
+        print(
+            f"Perfil solicitado: {resultado.perfil_solicitado} | "
+            f"efectivo: {resultado.perfil_efectivo}",
+            flush=True,
+        )
+        print(f"Duracion objetivo: {resultado.duracion_objetivo:.3f} s", flush=True)
+        for salida in resultado.videos:
             print(f"Creado: {salida}", flush=True)
     print("LISTO: los JPG originales permanecen intactos.", flush=True)
     return 0

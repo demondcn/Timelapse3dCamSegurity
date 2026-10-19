@@ -24,6 +24,7 @@ from exportador_video import cargar_configuracion as cargar_config_video
 from exportador_video import exportar_videos
 from mejora_imagenes import cargar_configuracion as cargar_config_mejora
 from mejora_imagenes import procesar_secuencia
+from perfiles_exportacion import exportar_perfil
 
 BASE = Path(__file__).resolve().parent
 CFG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
@@ -328,23 +329,21 @@ def run(mode):
         cam.stop()
         stop_ffmpeg(recorder)
         if not test:
-            fotos_video = files
             if files:
                 try:
-                    config_mejora = cargar_config_mejora(CFG.get("mejora"))
-                    if config_mejora.habilitada:
-                        tell("Procesando copias mejoradas; los JPG originales no se modifican...")
-                        fotos_video = procesar_secuencia(
-                            files,
-                            folder / "imagenes_mejoradas",
-                            config_mejora,
-                            base=BASE,
-                            progreso=tell,
-                        )
+                    tell("Procesando originales con el perfil de exportacion configurado...")
+                    resultado = exportar_perfil(
+                        files, folder, CFG, base=BASE, progreso=tell
+                    )
+                    tell(
+                        f"Perfil solicitado={resultado.perfil_solicitado}; "
+                        f"efectivo={resultado.perfil_efectivo}; "
+                        f"duracion={resultado.duracion_objetivo:.3f} s"
+                    )
                 except (OSError, RuntimeError, ValueError) as exc:
-                    tell(f"AVISO: la mejora fallo; se exportaran los originales: {exc}")
-                    fotos_video = files
-            build_videos(folder, fotos_video)
+                    tell(f"ERROR en el perfil de exportacion; los originales siguen intactos: {exc}")
+            else:
+                tell("No hay fotos para exportar. Revisa el modo Smooth y los mensajes capture 0.")
         tell(f"RESULTADOS EN: {folder}")
 
 

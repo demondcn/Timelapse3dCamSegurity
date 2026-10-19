@@ -39,5 +39,41 @@
     "alto_horizontal": 1080,
     "ancho_vertical": 1080,
     "alto_vertical": 1920
+  },
+  "exportacion": {
+    "perfil": "ultra_ia",
+    "fallback_ultra": "alta_calidad",
+    "interpolacion_movimiento": false,
+    "perfiles": {
+      "estandar": {
+        "backend": "opencv",
+        "fps": 30,
+        "ancho_horizontal": 1920,
+        "alto_horizontal": 1080,
+        "ancho_vertical": 1080,
+        "alto_vertical": 1920
+      },
+      "alta_calidad": {
+        "backend": "ffmpeg",
+        "fps": 60,
+        "ancho_horizontal": 3840,
+        "alto_horizontal": 2160,
+        "ancho_vertical": 2160,
+        "alto_vertical": 3840,
+        "crf": 16,
+        "preset": "slow"
+      },
+      "ultra_ia": {
+        "backend": "ffmpeg",
+        "real_esrgan": true,
+        "fps": 60,
+        "ancho_horizontal": 3840,
+        "alto_horizontal": 2160,
+        "ancho_vertical": 2160,
+        "alto_vertical": 3840,
+        "crf": 15,
+        "preset": "slow"
+      }
+    }
   }
 }
