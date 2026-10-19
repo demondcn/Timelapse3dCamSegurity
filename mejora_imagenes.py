@@ -14,6 +14,14 @@ import cv2
 import numpy as np
 
 
+class RealESRGANError(RuntimeError):
+    """Fallo controlado del procesador externo de superresolucion."""
+
+
+class RealESRGANNoDisponibleError(FileNotFoundError):
+    """El perfil solicita Real-ESRGAN, pero el ejecutable no esta instalado."""
+
+
 @dataclass(frozen=True)
 class RealESRGANConfig:
     habilitado: bool = False
@@ -201,7 +209,7 @@ def _aplicar_real_esrgan(
     sr = config.real_esrgan
     ejecutable = _resolver_ejecutable(sr.ejecutable, base)
     if not ejecutable.is_file():
-        raise FileNotFoundError(
+        raise RealESRGANNoDisponibleError(
             "Real-ESRGAN esta habilitado pero no existe el ejecutable configurado: "
             f"{ejecutable}"
         )
@@ -217,15 +225,20 @@ def _aplicar_real_esrgan(
         ]
         if sr.gpu_id.lower() != "auto":
             comando.extend(["-g", sr.gpu_id])
-        proceso = subprocess.run(
-            comando, cwd=ejecutable.parent, capture_output=True, text=True, timeout=900
-        )
+        try:
+            proceso = subprocess.run(
+                comando, cwd=ejecutable.parent, capture_output=True, text=True, timeout=900
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RealESRGANError(f"No se pudo ejecutar Real-ESRGAN: {exc}") from exc
         if proceso.returncode != 0 or not salida.is_file():
             detalle = (proceso.stderr or proceso.stdout)[-1200:]
-            raise RuntimeError(f"Real-ESRGAN fallo (codigo {proceso.returncode}): {detalle}")
+            raise RealESRGANError(
+                f"Real-ESRGAN fallo (codigo {proceso.returncode}): {detalle}"
+            )
         resultado = cv2.imread(str(salida), cv2.IMREAD_COLOR)
         if resultado is None:
-            raise RuntimeError("Real-ESRGAN no produjo una imagen legible")
+            raise RealESRGANError("Real-ESRGAN no produjo una imagen legible")
         return resultado
 
 

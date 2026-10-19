@@ -98,6 +98,7 @@ def exportar_videos(
         raise FileNotFoundError("Falta una fotografia de la secuencia")
     carpeta_salida = Path(carpeta_salida).resolve()
     carpeta_salida.mkdir(parents=True, exist_ok=True)
+    total_fotogramas = max(1, round(len(archivos) * fps_salida / fotos_por_segundo))
 
     salidas: list[Path] = []
     with tempfile.TemporaryDirectory(prefix="tapo_ffmpeg_") as temporal:
@@ -117,6 +118,7 @@ def exportar_videos(
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
                 "-safe", "0", "-f", "concat", "-i", str(manifiesto),
                 "-vf", _filtro(ancho, alto, fps_salida, config.pix_fmt),
+                "-frames:v", str(total_fotogramas), "-fps_mode", "cfr",
                 "-c:v", config.codec, "-crf", str(config.crf),
                 "-preset", config.preset, "-pix_fmt", config.pix_fmt,
                 "-color_primaries", "bt709", "-color_trc", "bt709",
