@@ -1,0 +1,52 @@
+
+# ========================================
+# SEGURIDAD - NO SUBIR A GITHUB
+# ========================================
+
+# Configuraciones privadas
+config*.json
+!config.example.json
+
+# Credenciales y variables de entorno
+.env
+.env.*
+!.env.example
+*credentials*
+*.secret
+
+# ========================================
+# ARCHIVOS GENERADOS
+# ========================================
+
+# Fotografias, videos y resultados
+resultados/
+capturas/
+imagenes_mejoradas/
+
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.mkv
+*.avi
+*.wav
+*.mp3
+*.zip
+
+# ========================================
+# PYTHON
+# ========================================
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ========================================
+# WINDOWS Y EDITORES
+# ========================================
+
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

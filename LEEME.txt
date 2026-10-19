@@ -1,0 +1,41 @@
+TAPO C210 + CREALITY HI - TIMELAPSE POR EVENTO 'capture 0'
+
+IMPORTANTE: este programa no mueve la impresora ni manda G-code.
+Lee los mensajes nuevos 'capture 0' enviados por Moonraker.
+Debes imprimir con el modo de timelapse Smooth activo y el cabezal estacionandose por capa.
+
+1) Ejecuta 0_INSTALAR.bat (solo una vez).
+2) Inicia una impresion corta en la Creality Hi con Smooth.
+3) Ejecuta 1_PROBAR_TIEMPOS.bat DURANTE LA IMPRESION.
+   - Espera a que detecte 3 eventos nuevos capture 0.
+   - En la carpeta resultados/YYYY-MM-DD..._PRUEBA, compara fotos
+     de cada evento tomadas a 0.0, 0.3, 0.7, 1.1, 1.5, 2.0 segundos.
+   - Elige el momento en que el cabezal NO tapa la pieza y la cama esta quieta.
+4) Edita config.json, cambia "retardo_captura_seg" al valor elegido.
+5) Para grabar la siguiente impresion, ejecuta 2_TIMELAPSE_AUTOMATICO.bat.
+   - Una foto por evento, sin leer eventos antiguos.
+   - Cuando la impresion termina, crea timelapse_horizontal.mp4
+     y timelapse_tiktok_9x16.mp4 dentro de resultados/.
+   - Tambien guarda video_completo.mkv si FFmpeg esta instalado.
+   - Puedes pulsar Ctrl+C para detener y exportar manualmente.
+
+Para instalar FFmpeg desde PowerShell (opcional, recomendado):
+winget install --id Gyan.FFmpeg -e
+Cierra y vuelve a abrir la consola despues de instalarlo.
+
+RED: PC, Tapo C210 y Creality Hi en misma red local.
+URL API Moonraker: http://192.168.40.15:7125
+URL RTSP Tapo: rtsp://<credenciales>@192.168.40.20:554/stream1
+Si VLC esta conectado, cierralo antes de ejecutar.
+
+Seguridad:
+- El archivo config.json contiene tu contrasena de camara. No lo compartas.
+- No abras el puerto 7125 ni 554 al Internet.
+- Cambia la contrasena de la cuenta de camara, ya compartida en chat,
+  y luego actualiza el archivo config.json.
+
+NOTA IMPORTANTE SOBRE 1.22 SEGUNDOS:
+Ese es el tiempo de estacionamiento medido, NO un retardo de captura.
+RTSP puede tener latencia; por eso la prueba toma fotos entre 0 y 2 segundos
+para elegir el momento correcto. No asumimos que 'capture 0' aparece al inicio
+del estacionamiento hasta verificar las fotos en el equipo real.
