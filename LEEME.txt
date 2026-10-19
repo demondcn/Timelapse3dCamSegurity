@@ -1,5 +1,7 @@
 TAPO C210 + CREALITY HI - TIMELAPSE POR EVENTO 'capture 0'
 
+DOCUMENTACION COMPLETA: abre README.md.
+
 IMPORTANTE: este programa no mueve la impresora ni manda G-code.
 Lee los mensajes nuevos 'capture 0' enviados por Moonraker.
 Debes imprimir con el modo de timelapse Smooth activo y el cabezal estacionandose por capa.
@@ -14,8 +16,9 @@ Debes imprimir con el modo de timelapse Smooth activo y el cabezal estacionandos
 4) Edita config.json, cambia "retardo_captura_seg" al valor elegido.
 5) Para grabar la siguiente impresion, ejecuta 2_TIMELAPSE_AUTOMATICO.bat.
    - Una foto por evento, sin leer eventos antiguos.
-   - Cuando la impresion termina, crea timelapse_horizontal.mp4
-     y timelapse_tiktok_9x16.mp4 dentro de resultados/.
+   - Cuando la impresion termina, conserva los JPG originales, crea copias
+     en imagenes_mejoradas/ y genera timelapse_horizontal.mp4 y
+     timelapse_tiktok_9x16.mp4 dentro de resultados/.
    - Tambien guarda video_completo.mkv si FFmpeg esta instalado.
    - Puedes pulsar Ctrl+C para detener y exportar manualmente.
 
@@ -24,8 +27,8 @@ winget install --id Gyan.FFmpeg -e
 Cierra y vuelve a abrir la consola despues de instalarlo.
 
 RED: PC, Tapo C210 y Creality Hi en misma red local.
-URL API Moonraker: http://192.168.40.15:7125
-URL RTSP Tapo: rtsp://<credenciales>@192.168.40.20:554/stream1
+URL API Moonraker: http://<IP_IMPRESORA>:7125
+URL RTSP Tapo: rtsp://<credenciales>@<IP_CAMARA>:554/stream1
 Si VLC esta conectado, cierralo antes de ejecutar.
 
 Seguridad:

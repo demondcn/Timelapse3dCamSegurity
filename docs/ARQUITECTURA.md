@@ -43,12 +43,12 @@ Real-ESRGAN NCNN Vulkan es una etapa opcional entre OpenCV y el JPG mejorado. Si
 - Las URL con credenciales no se imprimen.
 - Una falla de mejora no elimina fotos ni el video completo. La sesion permanece recuperable.
 
-## Modulos previstos
+## Modulos implementados
 
 - `mejora_imagenes.py`: validacion de configuracion, analisis temporal y procesamiento OpenCV; adaptador opcional NCNN.
 - `exportador_video.py`: manifiesto concat y dos salidas H.264 configurables.
 - `mejorar_fotos.py`: CLI reutilizable para sesiones antiguas.
-- `timelapse_fluidd.py`: orquestacion existente y llamada poscaptura a los modulos anteriores.
+- `timelapse_fluidd.py`: orquestacion existente y llamada poscaptura a los modulos anteriores. Si la mejora falla, conserva la ruta de exportacion desde originales.
 - `tests/`: pruebas sinteticas que no acceden a red, impresora ni camara.
 
 ## Estrategia contra parpadeo
