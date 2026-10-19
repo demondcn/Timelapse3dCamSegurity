@@ -20,6 +20,11 @@ try:
 except ImportError as exc:
     raise SystemExit("Dependencia ausente: ejecuta 0_INSTALAR.bat primero") from exc
 
+from exportador_video import cargar_configuracion as cargar_config_video
+from exportador_video import exportar_videos
+from mejora_imagenes import cargar_configuracion as cargar_config_mejora
+from mejora_imagenes import procesar_secuencia
+
 BASE = Path(__file__).resolve().parent
 CFG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
 PRINTER_HOST = CFG["impresora_ip"]
@@ -220,20 +225,14 @@ def build_videos(folder, paths):
         return
     tell(f"Exportando {len(paths)} fotografias: {FOTO_FPS:g} fotos/s, MP4 a {FPS} fps...")
     if shutil.which("ffmpeg"):
-        source = folder / "capa_%06d.jpg"
-        for vertical, filename in ((False, "timelapse_horizontal.mp4"),
-                                   (True, "timelapse_tiktok_9x16.mp4")):
-            vf = ("crop=ih*9/16:ih,scale=1080:1920" if vertical else "scale=1920:1080")
-            cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-                   "-framerate", str(FOTO_FPS), "-start_number", "1", "-i", str(source),
-                   "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                   "-crf", "19", "-preset", "medium", "-r", str(FPS), "-movflags", "+faststart",
-                   str(folder / filename)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                tell(f"Creado: {filename}")
-            else:
-                tell(f"Error FFmpeg {filename}: {result.stderr[-400:]}")
+        try:
+            salidas = exportar_videos(
+                paths, folder, FOTO_FPS, FPS, cargar_config_video(CFG.get("video")), progreso=tell
+            )
+            for salida in salidas:
+                tell(f"Creado: {salida.name}")
+        except (OSError, RuntimeError, ValueError) as exc:
+            tell(f"ERROR exportando con FFmpeg: {exc}")
     else:
         build_video_opencv(paths, folder / "timelapse_horizontal.mp4", vertical=False)
         build_video_opencv(paths, folder / "timelapse_tiktok_9x16.mp4", vertical=True)
@@ -329,7 +328,23 @@ def run(mode):
         cam.stop()
         stop_ffmpeg(recorder)
         if not test:
-            build_videos(folder, files)
+            fotos_video = files
+            if files:
+                try:
+                    config_mejora = cargar_config_mejora(CFG.get("mejora"))
+                    if config_mejora.habilitada:
+                        tell("Procesando copias mejoradas; los JPG originales no se modifican...")
+                        fotos_video = procesar_secuencia(
+                            files,
+                            folder / "imagenes_mejoradas",
+                            config_mejora,
+                            base=BASE,
+                            progreso=tell,
+                        )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    tell(f"AVISO: la mejora fallo; se exportaran los originales: {exc}")
+                    fotos_video = files
+            build_videos(folder, fotos_video)
         tell(f"RESULTADOS EN: {folder}")
 
 
