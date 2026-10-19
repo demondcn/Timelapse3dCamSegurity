@@ -8,12 +8,14 @@ La suite no necesita red, camara ni impresora. Cubre:
 - reduccion de variacion de luminancia en una secuencia con parpadeo sintetico;
 - limites y rechazo de configuraciones agresivas o invalidas;
 - ejecucion sin Real-ESRGAN cuando esta desactivado;
-- generacion real con FFmpeg e inspeccion con ffprobe de codec, formato y dimensiones.
+- fallback no destructivo cuando falta Real-ESRGAN;
+- salidas versionadas que no reemplazan videos anteriores;
+- generacion real con OpenCV y FFmpeg e inspeccion con ffprobe de codec, FPS, recuento, duracion y dimensiones.
 
 Resultado de referencia en Windows, Python 3.13, OpenCV 5.0 y FFmpeg 9.0:
 
 ```text
-8 passed
+13 passed
 ```
 
 ## Prueba con capturas reales
@@ -36,6 +38,28 @@ No se habilito Real-ESRGAN: esta validacion corresponde al camino obligatorio Op
 |---|---:|---|---|---:|---:|
 | Horizontal | 1920 x 1080 | H.264 / yuv420p | BT.709, rango TV | 30 | 11.0 s |
 | TikTok | 1080 x 1920 | H.264 / yuv420p | BT.709, rango TV | 30 | 11.0 s |
+
+## Validacion de los tres perfiles
+
+Se usaron seis capturas reales de 2304 x 1296 y `fotos_por_segundo = 6`, por lo que la duracion objetivo fue exactamente 1 segundo. La salida se escribio fuera de la sesion original.
+
+| Perfil efectivo | Salida | Resolucion | FPS | Fotogramas | Duracion |
+|---|---|---:|---:|---:|---:|
+| Estandar/OpenCV | Horizontal | 1920 x 1080 | 30 | 30 | 1.000 s |
+| Estandar/OpenCV | Vertical | 1080 x 1920 | 30 | 30 | 1.000 s |
+| Alta calidad/FFmpeg | Horizontal | 3840 x 2160 | 60 | 60 | 1.000 s |
+| Alta calidad/FFmpeg | Vertical | 2160 x 3840 | 60 | 60 | 1.000 s |
+
+Ultra IA se solicito sin un ejecutable NCNN instalado. El sistema creo el informe de fallo y ejecuto Alta calidad como fallback desde los JPG originales. No trato los originales como destino y no uso interpolacion de movimiento.
+
+La sesion existente de 266 fotografias se inventario antes y despues de la implementacion:
+
+| Comprobacion | Antes | Despues |
+|---|---:|---:|
+| JPG originales | 266 | 266 |
+| Archivos totales de la sesion | 537 | 537 |
+| Bytes totales | 318922624 | 318922624 |
+| Fingerprint agregado SHA-256 | `4b0a40e5...f2dec6` | `4b0a40e5...f2dec6` |
 
 ## Criterio visual recomendado
 

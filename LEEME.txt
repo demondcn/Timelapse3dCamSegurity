@@ -16,9 +16,10 @@ Debes imprimir con el modo de timelapse Smooth activo y el cabezal estacionandos
 4) Edita config.json, cambia "retardo_captura_seg" al valor elegido.
 5) Para grabar la siguiente impresion, ejecuta 2_TIMELAPSE_AUTOMATICO.bat.
    - Una foto por evento, sin leer eventos antiguos.
-   - Cuando la impresion termina, conserva los JPG originales, crea copias
-     en imagenes_mejoradas/ y genera timelapse_horizontal.mp4 y
-     timelapse_tiktok_9x16.mp4 dentro de resultados/.
+   - Cuando la impresion termina, conserva los JPG originales y exporta el
+     perfil configurado en exportaciones/<perfil>/, sin reemplazar resultados.
+   - El perfil inicial Ultra IA genera 4K 60 FPS; si Real-ESRGAN no esta
+     instalado, usa Alta calidad 4K 60 FPS sobre nuevas copias.
    - Tambien guarda video_completo.mkv si FFmpeg esta instalado.
    - Puedes pulsar Ctrl+C para detener y exportar manualmente.
 

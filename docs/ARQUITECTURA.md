@@ -26,13 +26,13 @@ La integracion de calidad se coloca despues de finalizar las capturas. No cambia
 ```text
 JPG originales (solo lectura)
     -> procesador OpenCV de secuencia
-    -> imagenes_mejoradas/capa_NNNNNN.jpg
-    -> exportador FFmpeg
-       -> timelapse_horizontal.mp4
-       -> timelapse_tiktok_9x16.mp4
+    -> exportaciones/<perfil>/fotogramas_procesados/
+       -> estandar: VideoWriter OpenCV, 1080p30
+       -> alta_calidad: FFmpeg/Lanczos, 4K60
+       -> ultra_ia: Real-ESRGAN sobre copias -> FFmpeg/Lanczos, 4K60
 ```
 
-Real-ESRGAN NCNN Vulkan es una etapa opcional entre OpenCV y el JPG mejorado. Si esta desactivado no se necesita el ejecutable, Vulkan, modelos ni paquetes Python adicionales.
+Real-ESRGAN NCNN Vulkan es una etapa opcional entre OpenCV y el JPG mejorado. Si no esta instalado, Ultra registra el fallo y puede crear Alta calidad desde los originales. No se necesita CUDA, PyTorch ni paquetes Python adicionales.
 
 ## Invariantes de seguridad y operacion
 
@@ -42,13 +42,16 @@ Real-ESRGAN NCNN Vulkan es una etapa opcional entre OpenCV y el JPG mejorado. Si
 - Los nombres y argumentos de procesos externos se pasan como listas, sin una shell.
 - Las URL con credenciales no se imprimen.
 - Una falla de mejora no elimina fotos ni el video completo. La sesion permanece recuperable.
+- Cada exportacion usa una carpeta nueva (`perfil`, `perfil_002`, etc.) y nunca reemplaza archivos generados.
+- La duracion depende de fotos/segundo, no de los FPS de salida. Los fotogramas se duplican sin interpolacion de movimiento.
 
 ## Modulos implementados
 
 - `mejora_imagenes.py`: validacion de configuracion, analisis temporal y procesamiento OpenCV; adaptador opcional NCNN.
 - `exportador_video.py`: manifiesto concat y dos salidas H.264 configurables.
+- `perfiles_exportacion.py`: seleccion de perfil, salidas versionadas, OpenCV 1080p, FFmpeg 4K y fallback de IA.
 - `mejorar_fotos.py`: CLI reutilizable para sesiones antiguas.
-- `timelapse_fluidd.py`: orquestacion existente y llamada poscaptura a los modulos anteriores. Si la mejora falla, conserva la ruta de exportacion desde originales.
+- `timelapse_fluidd.py`: captura existente sin cambios y llamada al perfil solamente durante el cierre poscaptura.
 - `tests/`: pruebas sinteticas que no acceden a red, impresora ni camara.
 
 ## Estrategia contra parpadeo
