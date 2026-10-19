@@ -94,3 +94,14 @@ def test_real_esrgan_es_opcional(tmp_path):
     )
     resultado = procesar_secuencia(originales, tmp_path / "mejoradas", config)
     assert resultado[0].is_file()
+
+
+def test_real_esrgan_ausente_falla_sin_tocar_original(tmp_path):
+    originales = _crear_secuencia(tmp_path / "originales", niveles=(100,))
+    hash_antes = _hash(originales[0])
+    config = cargar_configuracion(
+        {"real_esrgan": {"habilitado": True, "ejecutable": "no_existe.exe"}}
+    )
+    with pytest.raises(FileNotFoundError, match="Real-ESRGAN"):
+        procesar_secuencia(originales, tmp_path / "mejoradas", config)
+    assert _hash(originales[0]) == hash_antes
