@@ -1,12 +1,10 @@
 """Timelapse Tapo C210 + Creality Hi. Solo LECTURA en Moonraker, no envia G-code."""
-import argparse
 import heapq
 import json
 import queue
 import re
 import shutil
 import subprocess
-import sys
 import threading
 import time
 from datetime import datetime
@@ -18,16 +16,13 @@ try:
     import cv2
     import websocket
 except ImportError as exc:
-    raise SystemExit("Dependencia ausente: ejecuta 0_INSTALAR.bat primero") from exc
+    raise SystemExit("Dependencia ausente: ejecuta 'py -m pip install -r requirements.txt'") from exc
 
-from exportador_video import cargar_configuracion as cargar_config_video
-from exportador_video import exportar_videos
-from mejora_imagenes import cargar_configuracion as cargar_config_mejora
-from mejora_imagenes import procesar_secuencia
-from perfiles_exportacion import exportar_perfil
+from .exportador_video import cargar_configuracion as cargar_config_video
+from .exportador_video import exportar_videos
 
-BASE = Path(__file__).resolve().parent
-CFG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
+ROOT = Path(__file__).resolve().parent.parent
+CFG = json.loads((ROOT / "config" / "config.json").read_text(encoding="utf-8"))
 PRINTER_HOST = CFG["impresora_ip"]
 CAM_HOST = CFG["camara_ip"]
 RTSP = (f"rtsp://{quote(CFG['usuario_camara'], safe='')}:"
@@ -51,7 +46,6 @@ except (TypeError, ValueError):
 if not 0.1 <= FOTO_FPS <= 60:
     FOTO_FPS = 6.0
 CAPTURE_DELAY = float(CFG.get("retardo_captura_seg", 0.3))
-TEST_OFFSETS = [float(x) for x in CFG.get("retardos_prueba_seg", [0, 0.3, 0.7, 1.1, 1.5, 2.0])]
 EVENT_RE = re.compile(r"(?:^|\s)(?://\s*)?capture\s+0(?:\s|$)", re.I)
 
 
@@ -172,16 +166,24 @@ def ffmpeg_record(folder):
     try:
         proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
+        # No anunciar exito si FFmpeg rechazo el segundo acceso RTSP o fallo
+        # al abrir el contenedor nada mas arrancar.
+        time.sleep(0.5)
+        if proc.poll() is not None:
+            path.unlink(missing_ok=True)
+            tell("No se pudo iniciar el video completo; el timelapse por fotos continuara.")
+            return None
         tell(f"Video completo activado: {path.name}")
-        return proc
+        return proc, path
     except OSError as exc:
         tell(f"No se pudo iniciar video completo: {exc}")
         return None
 
 
-def stop_ffmpeg(proc):
-    if not proc:
+def stop_ffmpeg(recorder):
+    if not recorder:
         return
+    proc, path = recorder
     if proc.poll() is None:
         try:
             # La tecla q permite a FFmpeg cerrar el contenedor correctamente.
@@ -193,6 +195,11 @@ def stop_ffmpeg(proc):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+    if path.is_file() and path.stat().st_size > 0:
+        tell(f"Video completo guardado: {path.name}")
+    else:
+        path.unlink(missing_ok=True)
+        tell("AVISO: FFmpeg no produjo video_completo.mkv; las fotos siguen intactas.")
 
 
 def build_video_opencv(files, target, vertical):
@@ -200,7 +207,7 @@ def build_video_opencv(files, target, vertical):
     writer = cv2.VideoWriter(str(target), cv2.VideoWriter_fourcc(*"mp4v"), FPS, size)
     if not writer.isOpened():
         tell(f"No se pudo abrir el codificador para {target.name}")
-        return
+        return False
     try:
         for imgfile in files:
             frame = cv2.imread(str(imgfile))
@@ -218,12 +225,13 @@ def build_video_opencv(files, target, vertical):
         tell(f"Creado: {target.name} (MP4V; FFmpeg permite H.264)")
     finally:
         writer.release()
+    return target.is_file() and target.stat().st_size > 0
 
 
 def build_videos(folder, paths):
     if not paths:
         tell("No hay fotos para exportar. Revisa el modo Smooth y los mensajes capture 0.")
-        return
+        return False
     tell(f"Exportando {len(paths)} fotografias: {FOTO_FPS:g} fotos/s, MP4 a {FPS} fps...")
     if shutil.which("ffmpeg"):
         try:
@@ -232,18 +240,21 @@ def build_videos(folder, paths):
             )
             for salida in salidas:
                 tell(f"Creado: {salida.name}")
+            return bool(salidas)
         except (OSError, RuntimeError, ValueError) as exc:
             tell(f"ERROR exportando con FFmpeg: {exc}")
-    else:
-        build_video_opencv(paths, folder / "timelapse_horizontal.mp4", vertical=False)
-        build_video_opencv(paths, folder / "timelapse_tiktok_9x16.mp4", vertical=True)
+            tell("Intentando crear los videos inmediatos con OpenCV...")
+    resultados = (
+        build_video_opencv(paths, folder / "timelapse_horizontal.mp4", vertical=False),
+        build_video_opencv(paths, folder / "timelapse_tiktok_9x16.mp4", vertical=True),
+    )
+    return all(resultados)
 
 
-def run(mode):
-    test = mode == "calibrar"
-    base = BASE / "resultados"
+def run():
+    base = ROOT / "resultados"
     base.mkdir(exist_ok=True)
-    folder = base / (datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ("_PRUEBA" if test else "_TIMELAPSE"))
+    folder = base / (datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_TIMELAPSE")
     folder.mkdir()
     tell(f"Salida: {folder}")
     tell("Este programa SOLO LEE Moonraker; NO mueve el cabezal ni manda G-code.")
@@ -256,7 +267,6 @@ def run(mode):
     listener.start()
     recorder = None
     scheduled = []
-    counter = 0
     event_count = 0
     last_event = -1000
     files = []
@@ -271,11 +281,9 @@ def run(mode):
             if frame is not None and age < 1:
                 break
             time.sleep(.2)
-        if not test:
-            recorder = ffmpeg_record(folder)
+        recorder = ffmpeg_record(folder)
         tell("ESCUCHANDO: espera a que la impresora genere 'capture 0'...")
         while True:
-            now = time.monotonic()
             while True:
                 try:
                     event_at = listener_queue.get_nowait()
@@ -285,12 +293,12 @@ def run(mode):
                     continue
                 last_event = event_at
                 event_count += 1
+                # Un evento de capa demuestra que hay un trabajo activo aunque
+                # la consulta HTTP de estado haya fallado durante la impresion.
+                if not test:
+                    first_printing = True
                 tell(f"Evento #{event_count}: capture 0")
-                if test:
-                    for offset in TEST_OFFSETS:
-                        heapq.heappush(scheduled, (event_at + offset, event_count, offset))
-                else:
-                    heapq.heappush(scheduled, (event_at + CAPTURE_DELAY, event_count, CAPTURE_DELAY))
+                heapq.heappush(scheduled, (event_at + CAPTURE_DELAY, event_count, CAPTURE_DELAY))
 
             while scheduled and scheduled[0][0] <= time.monotonic():
                 _, num, offset = heapq.heappop(scheduled)
@@ -298,22 +306,14 @@ def run(mode):
                 if frame is None or age is None or age > 0.8:
                     tell(f"Foto perdida: Tapo sin fotograma reciente ({num}, +{offset}s)")
                     continue
-                if test:
-                    path = folder / f"evento_{num:03d}_mas_{offset:.2f}s.jpg"
-                else:
-                    path = folder / f"capa_{len(files)+1:06d}.jpg"
+                path = folder / f"capa_{len(files)+1:06d}.jpg"
                 if cv2.imwrite(str(path), frame):
-                    if not test:
-                        files.append(path)
+                    files.append(path)
                     tell(f"Foto guardada: {path.name} (edad imagen {age:.2f} s)")
                 else:
                     tell("ERROR guardando JPG")
 
-            if test and event_count >= 3 and not scheduled:
-                tell("Prueba terminada: revisa las fotos y elige el mejor retardo.")
-                break
-
-            if not test and time.monotonic() >= check_time:
+            if time.monotonic() >= check_time:
                 check_time = time.monotonic() + 3
                 state = print_state()
                 if state == "printing":
@@ -328,27 +328,17 @@ def run(mode):
         listener.stop()
         cam.stop()
         stop_ffmpeg(recorder)
-        if not test:
-            if files:
-                try:
-                    tell("Procesando originales con el perfil de exportacion configurado...")
-                    resultado = exportar_perfil(
-                        files, folder, CFG, base=BASE, progreso=tell
-                    )
-                    tell(
-                        f"Perfil solicitado={resultado.perfil_solicitado}; "
-                        f"efectivo={resultado.perfil_efectivo}; "
-                        f"duracion={resultado.duracion_objetivo:.3f} s"
-                    )
-                except (OSError, RuntimeError, ValueError) as exc:
-                    tell(f"ERROR en el perfil de exportacion; los originales siguen intactos: {exc}")
+        if files:
+            tell("Creando videos desde las fotos originales...")
+            videos_listos = build_videos(folder, files)
+            if videos_listos:
+                tell("Videos terminados. Ya puedes usarlos desde la carpeta principal.")
             else:
-                tell("No hay fotos para exportar. Revisa el modo Smooth y los mensajes capture 0.")
+                tell("ERROR: no se pudieron crear los videos; usa 3_RECUPERAR_MP4.bat.")
+        else:
+            tell("No hay fotos para exportar. Revisa el modo Smooth y los mensajes capture 0.")
         tell(f"RESULTADOS EN: {folder}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Timelapse Creality Hi + Tapo C210")
-    parser.add_argument("modo", choices=("calibrar", "grabar"))
-    opts = parser.parse_args()
-    run(opts.modo)
+    run()

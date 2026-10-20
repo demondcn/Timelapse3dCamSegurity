@@ -4,8 +4,8 @@
 # ========================================
 
 # Configuraciones privadas
-config*.json
-!config.example.json
+config/config.json
+!config/config.example.json
 
 # Credenciales y variables de entorno
 .env
@@ -20,8 +20,6 @@ config*.json
 
 # Fotografias, videos y resultados
 resultados/
-capturas/
-imagenes_mejoradas/
 
 *.jpg
 *.jpeg
@@ -44,10 +42,6 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Ejecutables/modelos opcionales descargados localmente
-herramientas/
-realesrgan-ncnn-vulkan*/
 
 # ========================================
 # WINDOWS Y EDITORES

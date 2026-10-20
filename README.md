@@ -1,139 +1,222 @@
-# Timelapse3dCamSegurity
+# Timelapse Tapo C210 + Creality Hi
 
-Timelapses por capa para una Tapo C210 y una impresora conectada a Moonraker/Fluidd. El programa escucha eventos nuevos `capture 0`, toma una fotografia tras el retardo configurado, conserva los JPG originales, genera copias mejoradas y exporta MP4 horizontal y vertical.
+Captura una fotografia por cada evento nuevo `capture 0` de Moonraker y, cuando termina la impresion, crea dos videos:
 
-El programa **no envia G-code** ni modifica el firmware. La grabacion RTSP continua sigue siendo independiente del timelapse.
+- `timelapse_horizontal.mp4`: 1920 x 1080.
+- `timelapse_tiktok_9x16.mp4`: 1080 x 1920.
+
+El programa solamente lee Moonraker. No mueve el cabezal, no controla la impresora y no envia G-code.
 
 ## Instalacion
 
-Requisitos: Windows, Python 3.10 o posterior, acceso local a Moonraker y a la Tapo, y FFmpeg en `PATH`.
-
-1. Instala FFmpeg, por ejemplo con `winget install --id Gyan.FFmpeg -e`, y abre una consola nueva.
-2. Ejecuta `0_INSTALAR.bat`.
-3. Copia `config.example.json` como `config.json`.
-4. Sustituye solamente en `config.json` las direcciones y credenciales ficticias por las locales.
-5. Ejecuta `1_PROBAR_TIEMPOS.bat` durante una impresion corta y elige el retardo en el que cabezal y cama esten quietos.
-
-`config.json` esta ignorado por Git. Nunca se debe renombrar como ejemplo ni adjuntar a incidencias.
-
-## Uso
-
-- `2_TIMELAPSE_AUTOMATICO.bat`: captura y, al terminar, aplica la mejora y exporta los videos.
-- `5_TIMELAPSE_AUTOMATICO_MEJORADO.bat`: punto de entrada explicito equivalente, con mensaje de error mas visible.
-- `4_MEJORAR_FOTOS_ANTIGUAS.bat`: mejora la sesion mas reciente y regenera los MP4.
-- Arrastrar una carpeta de sesion sobre `4_MEJORAR_FOTOS_ANTIGUAS.bat`: procesa esa carpeta concreta.
-- `3_RECUPERAR_MP4.bat`: reconstruye videos desde los JPG originales con el perfil configurado.
-
-Desde consola:
+Requisitos: Windows, Python 3.10 o posterior, FFmpeg en `PATH`, y acceso local a la impresora y la camara.
 
 ```powershell
-py mejorar_fotos.py --carpeta "resultados\AAAA-MM-DD_HH-MM-SS_TIMELAPSE"
-py mejorar_fotos.py --carpeta "resultados\..." --perfil estandar
-py mejorar_fotos.py --carpeta "resultados\..." --perfil alta_calidad
-py mejorar_fotos.py --carpeta "resultados\..." --perfil ultra_ia
-py mejorar_fotos.py --carpeta "resultados\..." --sin-video
+py -m pip install -r requirements.txt
+winget install --id Gyan.FFmpeg -e
 ```
 
-Cada sesion mantiene esta estructura:
+Despues de instalar FFmpeg, cierra y vuelve a abrir la consola.
+
+Copia `config/config.example.json` como `config/config.json` y completa las direcciones y credenciales locales.
+
+## Organizacion del proyecto
+
+```text
+tapo_auto_work/
+  5_TIMELAPSE_AUTOMATICO.bat    inicio normal
+  3_RECUPERAR_MP4.bat           recuperacion de una sesion
+  README.md                     documentacion principal
+  requirements.txt             dependencias de uso
+  requirements-dev.txt         dependencias de pruebas
+  app/                          codigo Python de la aplicacion
+    __init__.py
+    timelapse_fluidd.py
+    exportador_video.py
+    recuperar_timelapse.py
+  config/                       configuracion
+    config.example.json
+    config.json
+  docs/                         documentacion tecnica adicional
+  tests/                        pruebas automatizadas
+  resultados/                   fotos y videos generados
+```
+
+## Uso normal
+
+1. Inicia la impresion con el modo Smooth y los eventos `capture 0`.
+2. Ejecuta `5_TIMELAPSE_AUTOMATICO.bat`.
+3. Deja la ventana abierta mientras se recopilan las fotos.
+4. Cuando Moonraker informa que la impresion termino, el programa genera los dos MP4.
+5. Espera hasta que aparezca el mensaje `RESULTADOS EN`.
+
+El MP4 final se crea al terminar la impresion, no durante la recopilacion. Para finalizar antes, pulsa `Ctrl+C` una vez y espera la exportacion.
+
+No cierres la ventana con la X: Windows puede terminar Python sin darle tiempo a crear el video. El archivo `5_TIMELAPSE_AUTOMATICO.bat` no aplica mejoras, IA ni perfiles adicionales.
+
+## Recuperar una sesion
+
+Usa `3_RECUPERAR_MP4.bat` si quedaron los JPG pero faltan los MP4.
+
+- Si lo ejecutas normalmente, recupera la sesion mas reciente.
+- Si arrastras una carpeta de sesion encima del BAT, recupera esa carpeta.
+- Los JPG originales no se modifican.
+
+## Arquitectura
+
+El sistema separa la captura, la exportacion y la recuperacion:
+
+```text
+Tapo C210 --RTSP--> hilo Camera --------> ultimo fotograma disponible
+                                                |
+Moonraker --WebSocket--> evento capture 0 --> espera configurada
+                                                |
+                                                v
+                                       capa_NNNNNN.jpg
+                                                |
+                             impresion terminada o Ctrl+C
+                                                |
+                                                v
+                                   app/exportador_video.py
+                                         /            \
+                                        v              v
+                         timelapse_horizontal.mp4   timelapse_tiktok_9x16.mp4
+```
+
+Durante la impresion ocurren estas tareas:
+
+1. `Camera` mantiene abierto el stream RTSP y conserva el fotograma mas reciente.
+2. `PrinterEvents` escucha por WebSocket solamente eventos nuevos `capture 0`.
+3. Cada evento se coloca en una cola y se programa usando `retardo_captura_seg`.
+4. El fotograma se guarda como `capa_000001.jpg`, `capa_000002.jpg`, etc.
+5. El programa consulta el estado de impresion cada tres segundos.
+6. Cuando recibe `complete`, `cancelled`, `error` o `standby`, cierra la captura y exporta los videos.
+7. Si se pulsa `Ctrl+C`, realiza el mismo cierre y exporta las fotos recopiladas hasta ese momento.
+
+Opcionalmente, otro proceso FFmpeg copia el stream RTSP a `video_completo.mkv`. Esta grabacion es independiente del timelapse por capas y puede no existir si la camara rechaza una segunda conexion RTSP.
+
+## Que hace cada archivo Python
+
+### `app/timelapse_fluidd.py`
+
+Es el programa principal que ejecuta el BAT numero 5.
+
+Responsabilidades:
+
+- Cargar `config/config.json`.
+- Conectarse a la Tapo por RTSP.
+- Escuchar Moonraker por WebSocket.
+- Detectar los eventos `capture 0`.
+- Guardar una fotografia por capa.
+- Detectar el final de la impresion.
+- Solicitar a `app/exportador_video.py` la creacion de los dos MP4.
+- Intentar grabar `video_completo.mkv` cuando esa opcion esta activa.
+
+### `app/exportador_video.py`
+
+Es el modulo compartido que sabe convertir una secuencia de JPG en video.
+
+Responsabilidades:
+
+- Validar codec, calidad, dimensiones y FPS.
+- Crear el manifiesto temporal que FFmpeg usa para leer las fotos en orden.
+- Mantener la duracion definida por `fotos_por_segundo`.
+- Recortar y escalar las imagenes para horizontal y vertical.
+- Codificar H.264/H.265 y usar archivos temporales para no dejar un MP4 incompleto.
+
+No se ejecuta directamente. Lo utilizan tanto `app/timelapse_fluidd.py` como `app/recuperar_timelapse.py`.
+
+### `app/recuperar_timelapse.py`
+
+Es la herramienta de emergencia que ejecuta el BAT numero 3.
+
+No se conecta a Moonraker ni a la camara. Busca los archivos `capa_*.jpg` de una sesion y vuelve a llamar a `app/exportador_video.py`. Existe separado del programa principal porque permite reconstruir videos despues de cerrar accidentalmente la ventana, reiniciar el PC o sufrir un fallo de exportacion sin repetir la impresion.
+
+## Por que existen dos archivos de configuracion
+
+### `config/config.example.json`
+
+Es una plantilla publica y segura:
+
+- Contiene todas las opciones disponibles.
+- Usa direcciones y credenciales ficticias.
+- Puede guardarse en Git y compartirse.
+- Sirve para crear una configuracion nueva.
+
+### `config/config.json`
+
+Es la configuracion real que utiliza el programa:
+
+- Contiene la IP real de la impresora y la camara.
+- Contiene el usuario y la contrasena de la Tapo.
+- Puede tener ajustes propios de video y captura.
+- Esta ignorado por Git para evitar publicar credenciales.
+
+No son dos configuraciones activas: el programa solamente lee `config/config.json`. El archivo `config/config.example.json` es una plantilla y documentacion de referencia.
+
+## Por que existen dos archivos de requisitos
+
+### `requirements.txt`
+
+Contiene solo las dependencias necesarias para utilizar el programa:
+
+- `opencv-python`: lectura RTSP, manejo y guardado de imagenes.
+- `websocket-client`: conexion con los eventos de Moonraker.
+
+Instalacion:
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+### `requirements-dev.txt`
+
+Contiene las dependencias para desarrollar y ejecutar pruebas. Su primera linea incluye automaticamente todo `requirements.txt`, y ademas instala `pytest`.
+
+```text
+-r requirements.txt
+pytest>=8,<10
+```
+
+Un usuario normal solo necesita `requirements.txt`. `requirements-dev.txt` se utiliza al modificar o verificar el codigo.
+
+## Configuracion relevante
+
+- `retardo_captura_seg`: espera entre `capture 0` y la fotografia.
+- `fotos_por_segundo`: velocidad narrativa del timelapse.
+- `fps_timelapse`: FPS del archivo MP4.
+- `grabar_video_completo`: activa o desactiva la copia continua RTSP.
+- `video.crf`: calidad de compresion; un numero menor produce mayor calidad y archivos mas grandes.
+- `video.preset`: equilibrio entre velocidad y compresion.
+- `video.codec`: `libx264` o `libx265`.
+- `video.ancho_*` y `video.alto_*`: dimensiones horizontal y vertical.
+
+## Archivos de una sesion
 
 ```text
 resultados/AAAA-MM-DD_HH-MM-SS_TIMELAPSE/
-  capa_000001.jpg                 originales inmutables
-  video_completo.mkv              stream continuo, si esta habilitado
-  exportaciones/
-    ultra_ia/                      nunca reemplaza resultados anteriores
-      fotogramas_procesados/
-        capa_000001.jpg            copias OpenCV + IA
-        informe_mejora.json
-      timelapse_horizontal.mp4
-      timelapse_tiktok_9x16.mp4
-      informe_exportacion.json
-    ultra_ia_002/                  segunda ejecucion del mismo perfil
+  capa_000001.jpg
+  capa_000002.jpg
+  ...
+  timelapse_horizontal.mp4
+  timelapse_tiktok_9x16.mp4
+  video_completo.mkv
 ```
 
-Cada ejecucion reserva un directorio nuevo. Los MP4, informes y fotogramas de ejecuciones anteriores no se reemplazan. Si Ultra IA no puede iniciar Real-ESRGAN, registra el fallo y usa `fallback_ultra` sobre nuevas copias de los originales. Nada elimina una captura existente.
+Los JPG son la fuente recuperable y no se eliminan al exportar.
 
-## Perfiles de exportacion
+## Seguridad
 
-| Perfil | Procesamiento | Salida horizontal | Salida vertical |
-|---|---|---:|---:|
-| `estandar` | OpenCV, codec MP4V | 1920 x 1080, 30 FPS | 1080 x 1920, 30 FPS |
-| `alta_calidad` | OpenCV + FFmpeg/Lanczos | 3840 x 2160, 60 FPS | 2160 x 3840, 60 FPS |
-| `ultra_ia` | OpenCV + Real-ESRGAN NCNN Vulkan + FFmpeg/Lanczos | 3840 x 2160, 60 FPS | 2160 x 3840, 60 FPS |
-
-El perfil inicial es `ultra_ia`. La dependencia de IA sigue siendo opcional porque el fallback inicial es `alta_calidad`.
-
-Todos los perfiles parten directamente de `capa_*.jpg`; nunca usan la salida de otro perfil. La duracion objetivo siempre es `cantidad de fotos / fotos_por_segundo`. Para 30 o 60 FPS se generan exactamente `round(duracion x FPS)` fotogramas seleccionando y duplicando originales. `interpolacion_movimiento` es `false` y el sistema rechaza activarla: no usa flujo optico, mezcla ni `minterpolate`.
-
-## Procesamiento y estabilidad
-
-El procesador analiza primero toda la secuencia. Usa la mediana de luminancia, una referencia temporal bidireccional y ganancias limitadas. No aplica balance de blancos ni ecualizacion automatica independiente por foto. Despues aplica:
-
-1. reduccion moderada de ruido con Non-local Means;
-2. exposicion estabilizada sobre luminancia, sin variar el color;
-3. contraste fijo para toda la secuencia;
-4. mascara de enfoque moderada con parametros fijos;
-5. escritura JPG atomica dentro de la carpeta versionada del perfil.
-
-FFmpeg usa escalado Lanczos, H.264 configurable, rango TV, BT.709, `faststart` y salida compatible `yuv420p` por defecto.
-
-## Configuracion
-
-Los valores completos y sus tipos estan en `config.example.json`.
-
-| Clave | Efecto | Valor inicial |
-|---|---|---:|
-| `retardo_captura_seg` | Retardo despues de `capture 0`; no cambia con esta fase | `0.3` |
-| `fotos_por_segundo` | Velocidad narrativa del timelapse | `6.0` |
-| `exportacion.perfil` | Perfil automatico inicial | `ultra_ia` |
-| `exportacion.fallback_ultra` | Perfil usado si NCNN falla; `null` impide fallback | `alta_calidad` |
-| `exportacion.interpolacion_movimiento` | Debe permanecer desactivada | `false` |
-| `exportacion.perfiles.*.fps` | FPS propios de cada perfil | `30 / 60 / 60` |
-| `mejora.reduccion_ruido` | Intensidad Non-local Means, 0 desactiva | `3.0` |
-| `mejora.exposicion_ev` | Ajuste global, limitado a -1..+1 EV | `0.0` |
-| `mejora.estabilizar_exposicion` | Compensa variaciones temporales | `true` |
-| `mejora.ganancia_minima/maxima` | Limites contra sobrecorreccion | `0.9 / 1.1` |
-| `mejora.suavizado_temporal` | Peso de la referencia global | `0.85` |
-| `mejora.contraste` | Contraste fijo; 1 no cambia | `1.05` |
-| `mejora.nitidez` | Cantidad de mascara de enfoque | `0.35` |
-| `mejora.calidad_jpg` | Calidad de las copias | `95` |
-| `exportacion.perfiles.*.crf` | Calidad H.264; menor es mayor calidad/tamano | `16 / 15` |
-| `exportacion.perfiles.*.preset` | Compresion FFmpeg | `slow` |
-
-Las dimensiones, FPS, CRF y preset son configurables dentro de cada perfil. Los valores iniciales corresponden exactamente a 1080p30 y 4K60.
-
-## Real-ESRGAN NCNN Vulkan opcional
-
-La integracion usa el ejecutable portatil oficial; no instala PyTorch, CUDA ni paquetes Python. Ultra IA lo activa solamente sobre copias dentro de su propia carpeta de exportacion.
-
-1. Descarga el paquete Windows desde las [versiones oficiales de Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases).
-2. Extraelo como `herramientas/realesrgan-ncnn-vulkan/`, conservando el `.exe` y la carpeta `models` juntos.
-3. Actualiza el controlador grafico con soporte Vulkan.
-4. Prueba primero una sesion corta y luego configura:
-
-```json
-"real_esrgan": {
-  "habilitado": false,
-  "ejecutable": "herramientas/realesrgan-ncnn-vulkan/realesrgan-ncnn-vulkan.exe",
-  "modelo": "realesrgan-x4plus",
-  "escala": 2,
-  "tile": 0,
-  "gpu_id": "auto"
-}
-```
-
-El campo `habilitado` se conserva para el procesador independiente; el perfil Ultra lo activa de forma controlada. El modelo general es apropiado para fotografia. La escala aumenta mucho el tiempo, VRAM, almacenamiento y resolucion. `tile: 0` deja la seleccion automatica; si falta memoria, prueba 128 o 64. Si el ejecutable falla o no existe, la captura original sigue intacta y el fallback crea Alta calidad desde los originales.
-
-El proyecto oficial documenta que el binario portable incluye modelos y funciona con GPU Intel, AMD o NVIDIA mediante NCNN/Vulkan: [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN#portable-executable-files-ncnn) y [Real-ESRGAN NCNN Vulkan](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan).
+- No publiques `config/config.json`.
+- No abras los puertos 554 o 7125 hacia Internet.
+- Mantén la impresora, la camara y el PC en la misma red local.
+- Si una credencial se comparte accidentalmente, cambiala en la Tapo y actualiza `config/config.json`.
 
 ## Pruebas
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest -q
+py -m pip install -r requirements-dev.txt
+py -m pytest -q
 ```
 
-Las pruebas generan imagenes sinteticas, verifican que los originales y videos previos no cambien, validan carpetas versionadas, fallback de IA, duracion y recuento exacto de fotogramas a 30/60 FPS, y generan/inspeccionan ambos MP4 con ffprobe. No se conectan a la camara ni a Moonraker.
-
-Consulta [la arquitectura](docs/ARQUITECTURA.md) y [la validacion](docs/VALIDACION.md) para mas detalle.
+Las pruebas generan imagenes sinteticas. No se conectan a la impresora, Moonraker ni la camara.

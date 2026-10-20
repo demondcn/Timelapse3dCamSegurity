@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import pytest
 
-from exportador_video import cargar_configuracion, exportar_videos
+from app.exportador_video import cargar_configuracion, exportar_videos
 
 
 pytestmark = pytest.mark.skipif(

@@ -1,0 +1,20 @@
+{
+  "impresora_ip": "192.0.2.10",
+  "camara_ip": "192.0.2.20",
+  "usuario_camara": "usuario_ejemplo",
+  "contrasena_camara": "CAMBIAR_ESTA_CONTRASENA",
+  "retardo_captura_seg": 0.3,
+  "fotos_por_segundo": 6.0,
+  "fps_timelapse": 30,
+  "grabar_video_completo": true,
+  "video": {
+    "crf": 18,
+    "preset": "slow",
+    "codec": "libx264",
+    "pix_fmt": "yuv420p",
+    "ancho_horizontal": 1920,
+    "alto_horizontal": 1080,
+    "ancho_vertical": 1080,
+    "alto_vertical": 1920
+  }
+}
